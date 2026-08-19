@@ -915,7 +915,12 @@ body.is-admin .message-admin-actions {
 }
 
 .auth-logout {
+    display: none;
     margin-top: 8px;
+}
+
+body.is-access-granted .auth-logout {
+    display: inline-flex;
 }
 
 .auth-close {

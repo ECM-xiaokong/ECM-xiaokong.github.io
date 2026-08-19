@@ -117,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const accessStatus = document.getElementById('accessStatus');
         const accessSubmit = document.getElementById('accessSubmit');
         const accessPassword = document.getElementById('accessPassword');
+        const accessLogout = document.getElementById('accessLogout');
         const changeCodeForm = document.getElementById('changeCodeForm');
         const newNormalCode = document.getElementById('newNormalCode');
         const confirmNormalCode = document.getElementById('confirmNormalCode');
@@ -140,9 +141,20 @@ document.addEventListener('DOMContentLoaded', () => {
             accessModal.setAttribute('aria-hidden', 'true');
         }
 
+        function logoutAccess() {
+            localStorage.removeItem(ACCESS_STORAGE_KEY);
+            localStorage.removeItem(ACCESS_TOKEN_KEY);
+            localStorage.removeItem(ACCESS_ROLE_KEY);
+            applyAccessState();
+            accessForm.reset();
+            setAccessStatus('已退出暗号授权喵~');
+            closeAccessModal();
+        }
+
         window.openAccessModal = openAccessModal;
 
         accessButton.addEventListener('click', openAccessModal);
+        accessLogout.addEventListener('click', logoutAccess);
         accessClose.addEventListener('click', closeAccessModal);
         accessModal.addEventListener('click', (event) => {
             if (event.target === accessModal) closeAccessModal();
