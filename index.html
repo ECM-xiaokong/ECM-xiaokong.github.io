@@ -100,7 +100,7 @@
     <!-- 顶部操作区：登录注册和效果设置 -->
     <div class="top-actions">
         <button class="auth-btn" id="accessButton" type="button" title="输入访问暗号">🔑 暗号</button>
-        <button class="edit-mode-btn admin-only" id="editModeBtn" type="button" title="开启编辑模式">✏️ 编辑模式</button>
+        <button class="edit-mode-btn admin-only" id="editModeBtn" type="button" title="开启编辑模式" aria-pressed="false">✏️ 编辑模式</button>
         <button class="settings-btn" id="settingsBtn" onclick="toggleSettings()" title="效果设置">⚙️</button>
     </div>
 
@@ -165,7 +165,7 @@
                 <nav class="category-list" id="categoryList" aria-label="网站分类导航"></nav>
                 <nav class="category-list" aria-label="站长推荐导航">
                     <details class="category-item" data-access-required>
-                        <summary><span>💗站长推荐💗</span><button class="admin-only admin-edit-button" type="button" data-admin-action="recommendations">管理链接</button></summary>
+                        <summary><span>💗站长推荐💗</span></summary>
                         <ul class="category-links" id="recommendationLinks">
                             <li class="empty-recommendations">正在加载推荐链接喵~</li>
                         </ul>
@@ -175,6 +175,7 @@
                             <input type="url" id="recommendationUrl" placeholder="https://example.com" required>
                             <div class="admin-form-actions">
                                 <button class="btn" type="submit">保存链接</button>
+                                <button class="delete-link-button" id="recommendationDelete" type="button" disabled>删除</button>
                                 <button class="admin-cancel-button" id="recommendationCancel" type="button">取消</button>
                             </div>
                         </form>

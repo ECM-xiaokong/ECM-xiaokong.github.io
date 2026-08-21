@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.toggle('is-admin', isAdmin);
         const accessButton = document.getElementById('accessButton');
         if (accessButton) accessButton.textContent = isAdmin ? '🔑 管理员' : valid ? '🔑 已授权' : '🔑 暗号';
-        if (!isAdmin) setLinkEditMode(false);
+        setLinkEditMode(false);
         if (valid) document.dispatchEvent(new Event('accessGranted'));
     }
 
@@ -89,6 +89,21 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (event) => {
         if (linkEditMode && event.target.closest('.category-links a, #recommendationLinks a')) event.preventDefault();
     }, true);
+
+    function moveItemSmoothly(list, item, target, insertBefore) {
+        const positions = new Map([...list.children].map((child) => [child, child.getBoundingClientRect()]));
+        target.parentNode.insertBefore(item, insertBefore ? target : target.nextSibling);
+
+        for (const [child, previousRect] of positions) {
+            const nextRect = child.getBoundingClientRect();
+            const offsetY = previousRect.top - nextRect.top;
+            if (!offsetY) continue;
+            child.animate([
+                { transform: `translateY(${offsetY}px)` },
+                { transform: 'translateY(0)' }
+            ], { duration: 240, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+        }
+    }
 
     function addLongPressSorting(list, itemSelector, saveOrder) {
         let pressTimer = null;
@@ -114,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(itemSelector);
             if (!target || target === draggedItem || !list.contains(target)) return;
             const rect = target.getBoundingClientRect();
-            target.parentNode.insertBefore(draggedItem, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
+            moveItemSmoothly(list, draggedItem, target, event.clientY < rect.top + rect.height / 2);
         });
 
         const finish = async (event) => {
@@ -622,6 +637,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('click', (event) => {
             if (event.button !== 0 || !clickTextToggle.checked) return;
 
+            const clickX = event.clientX;
+            const clickY = event.clientY;
+
             const word = words[clickIndex % words.length];
             clickIndex += 1;
 
@@ -629,8 +647,8 @@ document.addEventListener('DOMContentLoaded', () => {
             span.textContent = word;
             span.style.cssText = `
                 position: fixed;
-                left: ${event.pageX}px;
-                top: ${event.pageY}px;
+                left: ${clickX}px;
+                top: ${clickY}px;
                 z-index: 99999999;
                 pointer-events: none;
                 font-size: ${16 + Math.random() * 16}px;
@@ -643,8 +661,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.body.appendChild(span);
 
-            const startX = event.pageX;
-            const startY = event.pageY;
+            const startX = clickX;
+            const startY = clickY;
             const driftX = (Math.random() - 0.5) * 24;
             const driftY = -30 - Math.random() * 18;
             const rotation = (Math.random() - 0.5) * 18;
@@ -663,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 span.style.left = `${x}px`;
                 span.style.top = `${y}px`;
                 span.style.opacity = opacity;
-                span.style.transform = `rotate(${rotation * (1 - progress)}deg)`;
+                span.style.transform = `translate(-50%, -100%) rotate(${rotation * (1 - progress)}deg)`;
 
                 if (progress < 1) {
                     requestAnimationFrame(tick);
@@ -684,6 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const titleInput = document.getElementById('recommendationTitle');
         const urlInput = document.getElementById('recommendationUrl');
         const cancelButton = document.getElementById('recommendationCancel');
+        const deleteButton = document.getElementById('recommendationDelete');
         const supabaseClient = window.supabaseClient;
 
         function getWebUrl(value) {
@@ -701,6 +720,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function clearForm() {
             form.reset();
             idInput.value = '';
+            deleteButton.disabled = true;
         }
 
         async function loadRecommendations() {
@@ -724,12 +744,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     : 'Resources/TX.png';
                 return `
                 <li draggable="true" data-recommendation-id="${item.id}">
-                    <span class="recommendation-drag-handle admin-only" title="拖动排序" aria-label="拖动排序">⠿</span>
                     <a href="${escapeHtml(webUrl || item.url)}" target="_blank" rel="noopener noreferrer"><img class="link-favicon" src="${escapeHtml(faviconUrl)}" alt="" width="16" height="16" loading="lazy" onerror="this.onerror=null;this.src='Resources/TX.png';">${escapeHtml(item.title)}</a>
-                    <span class="admin-only recommendation-actions">
-                        <button class="recommendation-admin-action" type="button" data-recommendation-edit="${item.id}">编辑</button>
-                        <button class="recommendation-admin-action" type="button" data-recommendation-delete="${item.id}">删除</button>
-                    </span>
+                    <span class="recommendation-drag-handle admin-only" title="点击连接编辑，拖动六点排序" aria-label="点击连接编辑，拖动六点排序">⠿</span>
                 </li>
             `;
             }).join('') : '<li class="empty-recommendations">暂无推荐链接喵~</li>';
@@ -780,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const target = event.target.closest('[data-recommendation-id]');
             if (!dragging || !target || dragging === target) return;
             const targetRect = target.getBoundingClientRect();
-            target.parentNode.insertBefore(dragging, event.clientY < targetRect.top + targetRect.height / 2 ? target : target.nextSibling);
+            moveItemSmoothly(list, dragging, target, event.clientY < targetRect.top + targetRect.height / 2);
         });
         list.addEventListener('dragend', async () => {
             if (!linkEditMode) return;
@@ -791,31 +807,37 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         addLongPressSorting(list, '[data-recommendation-id]', saveRecommendationOrder);
         document.addEventListener('click', async (event) => {
-            const editButton = event.target.closest('[data-recommendation-edit]');
-            const deleteButton = event.target.closest('[data-recommendation-delete]');
-            if (editButton) {
+            const recommendationLink = event.target.closest('#recommendationLinks a');
+            if (recommendationLink && window.hasAdminAccess() && linkEditMode) {
+                event.preventDefault();
+                const recommendation = recommendationLink.closest('[data-recommendation-id]');
                 const { data } = await supabaseClient.rpc('get_recommendation', {
                     p_access_token: window.getAccessToken(),
-                    p_id: Number(editButton.dataset.recommendationEdit)
+                    p_id: Number(recommendation.dataset.recommendationId)
                 });
                 const item = Array.isArray(data) ? data[0] : data;
                 if (item) {
                     idInput.value = item.id;
                     titleInput.value = item.title;
                     urlInput.value = item.url;
+                    deleteButton.disabled = false;
                     form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
+                return;
             }
-            if (deleteButton) {
-                if (!window.hasAdminAccess()) return;
-                if (!await window.requestDeleteConfirmation('确定要删除这条推荐链接吗？')) return;
-                const { error } = await supabaseClient.rpc('admin_delete_recommendation', {
-                    p_access_token: window.getAccessToken(),
-                    p_id: Number(deleteButton.dataset.recommendationDelete)
-                });
-                if (error) window.alert(error.message);
-                await loadRecommendations();
-            }
+        });
+
+        deleteButton.addEventListener('click', async () => {
+            if (!window.hasAdminAccess() || !idInput.value) return;
+            if (!await window.requestDeleteConfirmation('确定要删除这条推荐链接吗？')) return;
+            const { error } = await supabaseClient.rpc('admin_delete_recommendation', {
+                p_access_token: window.getAccessToken(),
+                p_id: Number(idInput.value)
+            });
+            if (error) return window.alert(error.message);
+            clearForm();
+            form.style.display = 'none';
+            await loadRecommendations();
         });
 
         document.addEventListener('accessGranted', loadRecommendations);
@@ -838,7 +860,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!container || container.children.length) return;
             container.innerHTML = CATEGORIES.map((categoryId) => `
                 <details class="category-item">
-                    <summary class="category-summary"><span>${CATEGORY_NAMES[categoryId]}</span><button class="admin-only category-edit-btn" type="button" data-category-id="${categoryId}">编辑</button></summary>
+                    <summary class="category-summary"><span>${CATEGORY_NAMES[categoryId]}</span></summary>
                     <ul class="category-links" data-category-id="${categoryId}"><li class="category-loading">加载中喵~</li></ul>
                     <form class="category-admin-form admin-only" data-category-id="${categoryId}">
                         <input type="hidden" class="cat-link-id">
@@ -846,6 +868,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <input type="text" class="cat-link-url" placeholder="网址或联系方式（选填）">
                         <div class="admin-form-actions">
                             <button class="btn cat-save-btn" type="submit">保存</button>
+                            <button class="delete-link-button cat-delete-form-btn" type="button" disabled>删除</button>
                             <button class="admin-cancel-button cat-cancel-btn" type="button">取消</button>
                         </div>
                     </form>
@@ -889,6 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
             form.querySelector('.cat-link-id').value = '';
             form.querySelector('.cat-link-title').value = '';
             form.querySelector('.cat-link-url').value = '';
+            form.querySelector('.cat-delete-form-btn').disabled = true;
         }
 
         function renderCategoryLinks(categoryId, links) {
@@ -911,8 +935,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const displayTitle = categoryId === 'contact' && contactValue ? contactValue : escapeHtml(item.title);
                 const linkHtml = isWebUrl
                     ? `<a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer">${faviconHtml}${contactPrefix}${displayTitle}</a>`
-                    : `<span>${faviconHtml}${contactPrefix}${displayTitle || escapeHtml(item.title)}</span>`;
-                return `<li draggable="true" data-cat-link-id="${item.id}">${linkHtml}<span class="recommendation-drag-handle admin-only" title="长按并拖动排序" aria-label="长按并拖动排序">⠿</span><span class="admin-only category-link-actions"><button class="admin-only cat-edit-btn" type="button" data-cat-edit="${item.id}" data-cat-category="${categoryId}" data-cat-title="${escapeHtml(item.title)}" data-cat-url="${contactValue}">编辑</button><button class="admin-only cat-delete-btn" type="button" data-cat-delete="${item.id}" data-cat-category="${categoryId}">删除</button></span></li>`;
+                    : `<span class="editable-link">${faviconHtml}${contactPrefix}${displayTitle || escapeHtml(item.title)}</span>`;
+                return `<li draggable="true" data-cat-link-id="${item.id}" data-cat-category="${categoryId}" data-cat-title="${escapeHtml(item.title)}" data-cat-url="${contactValue}">${linkHtml}<span class="recommendation-drag-handle admin-only" title="长按并拖动排序" aria-label="长按并拖动排序">⠿</span></li>`;
             }).join('');
         }
 
@@ -948,7 +972,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const target = event.target.closest('[data-cat-link-id]');
                 if (!dragging || !target || dragging === target) return;
                 const rect = target.getBoundingClientRect();
-                target.parentNode.insertBefore(dragging, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
+                moveItemSmoothly(list, dragging, target, event.clientY < rect.top + rect.height / 2);
             });
             list.addEventListener('dragend', async () => {
                 const dragging = list.querySelector('.is-dragging');
@@ -991,45 +1015,43 @@ document.addEventListener('DOMContentLoaded', () => {
         ensureCategoryShells();
         CATEGORIES.forEach(addCategorySorting);
 
-        // 监听编辑按钮点击
+        // 管理员直接点击链接进入编辑
         document.addEventListener('click', (event) => {
-            const linkEditBtn = event.target.closest('.cat-edit-btn');
-            if (linkEditBtn && window.hasAdminAccess()) {
-                const form = getCategoryForm(linkEditBtn.dataset.catCategory);
+            const link = event.target.closest('.category-links a, .category-links .editable-link');
+            if (link && window.hasAdminAccess() && linkEditMode) {
+                event.preventDefault();
+                const item = link.closest('[data-cat-link-id]');
+                const form = getCategoryForm(item.dataset.catCategory);
                 if (form) {
-                    form.querySelector('.cat-link-id').value = linkEditBtn.dataset.catEdit;
-                    form.querySelector('.cat-link-title').value = linkEditBtn.dataset.catTitle;
-                    form.querySelector('.cat-link-url').value = linkEditBtn.dataset.catUrl;
+                    form.querySelector('.cat-link-id').value = item.dataset.catLinkId;
+                    form.querySelector('.cat-link-title').value = item.dataset.catTitle;
+                    form.querySelector('.cat-link-url').value = item.dataset.catUrl;
+                    form.querySelector('.cat-delete-form-btn').disabled = false;
                     form.closest('details')?.setAttribute('open', '');
                     form.style.display = 'flex';
                     form.querySelector('.cat-link-title').focus();
                 }
                 return;
             }
-            const editBtn = event.target.closest('.category-edit-btn');
-            if (!editBtn || !window.hasAdminAccess()) return;
-            event.preventDefault();
-            event.stopPropagation();
+        });
 
-            const categoryId = editBtn.dataset.categoryId;
-            const form = getCategoryForm(categoryId);
-            if (!form) return;
+        document.addEventListener('click', async (event) => {
+            const deleteButton = event.target.closest('.cat-delete-form-btn');
+            if (!deleteButton || !window.hasAdminAccess()) return;
+            const form = deleteButton.closest('.category-admin-form');
+            const idInput = form?.querySelector('.cat-link-id');
+            if (!form || !idInput?.value) return;
+            if (!await window.requestDeleteConfirmation('确定要删除这条链接吗？')) return;
 
-            const details = form.closest('details');
-            if (details) details.setAttribute('open', '');
-
-            const isVisible = form.style.display !== 'none';
-            if (isVisible) {
-                form.style.display = 'none';
-                editBtn.textContent = '编辑';
-            } else {
-                // 隐藏其他所有编辑表单
-                document.querySelectorAll('.category-admin-form').forEach(f => f.style.display = 'none');
-                document.querySelectorAll('.category-edit-btn').forEach(b => b.textContent = '编辑');
-                form.style.display = 'flex';
-                editBtn.textContent = '关闭编辑';
-                form.querySelector('.cat-link-title').focus();
-            }
+            const { error } = await supabaseClient.rpc('admin_delete_category_link', {
+                p_access_token: window.getAccessToken(),
+                p_id: Number(idInput.value)
+            });
+            if (error) return window.alert(error.message);
+            const categoryId = form.dataset.categoryId;
+            clearCategoryForm(categoryId);
+            form.style.display = 'none';
+            await loadCategoryLinks(categoryId);
         });
 
         // 保存链接
@@ -1045,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 获取当前最大 display_order
             const list = getCategoryList(categoryId);
-            const existingItems = list ? list.querySelectorAll('[data-cat-delete]') : [];
+            const existingItems = list ? list.querySelectorAll('[data-cat-link-id]') : [];
             const maxOrder = existingItems.length;
 
             const payload = {
@@ -1063,8 +1085,6 @@ document.addEventListener('DOMContentLoaded', () => {
             clearCategoryForm(categoryId);
             // 关闭编辑表单
             form.style.display = 'none';
-            const editBtn = document.querySelector(`.category-edit-btn[data-category-id="${categoryId}"]`);
-            if (editBtn) editBtn.textContent = '编辑';
             await loadCategoryLinks(categoryId);
         });
 
@@ -1079,8 +1099,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const categoryId = form.dataset.categoryId;
             clearCategoryForm(categoryId);
             form.style.display = 'none';
-            const editBtn = document.querySelector(`.category-edit-btn[data-category-id="${categoryId}"]`);
-            if (editBtn) editBtn.textContent = '编辑';
         });
 
         // 删除链接
