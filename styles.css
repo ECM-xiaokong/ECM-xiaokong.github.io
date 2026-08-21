@@ -436,6 +436,28 @@ body.is-admin .category-admin-form {
     flex-shrink: 0;
 }
 
+.recommendation-drag-handle {
+    flex: 0 0 20px;
+    color: var(--primary-dark);
+    cursor: grab;
+    font-size: 1.2rem;
+    line-height: 1;
+    text-align: center;
+    user-select: none;
+}
+
+.recommendation-drag-handle:active {
+    cursor: grabbing;
+}
+
+.category-links li.is-dragging {
+    opacity: 0.45;
+}
+
+body:not(.is-admin) #recommendationLinks li {
+    cursor: default;
+}
+
 body.is-admin .recommendation-actions {
     display: inline-flex !important;
 }
@@ -1159,4 +1181,5 @@ body.is-access-granted .auth-logout {
         right: 15px;
         width: 240px;
     }
+
 }

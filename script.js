@@ -310,12 +310,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('particleToggle').checked = settings.particleEnabled !== false;
                 document.getElementById('clickTextToggle').checked = settings.clickTextEnabled !== false;
                 document.getElementById('trailCount').value = settings.trailCount || 2;
-                document.getElementById('trailMinSize').value = settings.trailMinSize || 5;
-                document.getElementById('trailMaxSize').value = settings.trailMaxSize || 12.5;
-                document.getElementById('trailSpeed').value = settings.trailSpeed || 0.3;
-                document.getElementById('trailLife').value = settings.trailLife || 90;
-                document.getElementById('trailGravity').value = settings.trailGravity === -0.02 ? 0 : (settings.trailGravity ?? 0);
-                document.getElementById('trailSpread').value = settings.trailSpread === 360 ? 70 : (settings.trailSpread ?? 70);
+                document.getElementById('trailMinSize').value = settings.trailMinSize ?? 2.5;
+                document.getElementById('trailMaxSize').value = settings.trailMaxSize ?? 8;
+                document.getElementById('trailSpeed').value = settings.trailSpeed ?? 0.6;
+                document.getElementById('trailLife').value = settings.trailLife ?? 50;
+                document.getElementById('trailGravity').value = settings.trailGravity ?? 0.05;
+                document.getElementById('trailSpread').value = settings.trailSpread ?? 10;
             } catch (error) {
                 console.error('Failed to load effect settings:', error);
             }
@@ -662,7 +662,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(webUrl)}&sz=32`
                     : 'Resources/TX.png';
                 return `
-                <li>
+                <li draggable="true" data-recommendation-id="${item.id}">
+                    <span class="recommendation-drag-handle admin-only" title="拖动排序" aria-label="拖动排序">⠿</span>
                     <a href="${escapeHtml(webUrl || item.url)}" target="_blank" rel="noopener noreferrer"><img class="link-favicon" src="${escapeHtml(faviconUrl)}" alt="" width="16" height="16" loading="lazy" onerror="this.onerror=null;this.src='Resources/TX.png';">${escapeHtml(item.title)}</a>
                     <span class="admin-only recommendation-actions">
                         <button class="recommendation-admin-action" type="button" data-recommendation-edit="${item.id}">编辑</button>
@@ -672,6 +673,20 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             }).join('') : '<li class="empty-recommendations">暂无推荐链接喵~</li>';
             document.body.classList.toggle('is-admin', window.hasAdminAccess());
+        }
+
+        async function saveRecommendationOrder() {
+            if (!window.hasAdminAccess()) return;
+            const ids = [...list.querySelectorAll('[data-recommendation-id]')]
+                .map((item) => Number(item.dataset.recommendationId));
+            const { error } = await supabaseClient.rpc('admin_reorder_recommendations', {
+                p_access_token: window.getAccessToken(),
+                p_ids: ids
+            });
+            if (error) {
+                window.alert(error.message || '推荐链接排序保存失败喵~');
+                await loadRecommendations();
+            }
         }
 
         form.addEventListener('submit', async (event) => {
@@ -690,6 +705,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         cancelButton.addEventListener('click', clearForm);
+        list.addEventListener('dragstart', (event) => {
+            const item = event.target.closest('[data-recommendation-id]');
+            if (!window.hasAdminAccess() || !item) return event.preventDefault();
+            item.classList.add('is-dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', item.dataset.recommendationId);
+        });
+        list.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            const dragging = list.querySelector('.is-dragging');
+            const target = event.target.closest('[data-recommendation-id]');
+            if (!dragging || !target || dragging === target) return;
+            const targetRect = target.getBoundingClientRect();
+            target.parentNode.insertBefore(dragging, event.clientY < targetRect.top + targetRect.height / 2 ? target : target.nextSibling);
+        });
+        list.addEventListener('dragend', async () => {
+            const dragging = list.querySelector('.is-dragging');
+            if (!dragging) return;
+            dragging.classList.remove('is-dragging');
+            await saveRecommendationOrder();
+        });
         document.addEventListener('click', async (event) => {
             const editButton = event.target.closest('[data-recommendation-edit]');
             const deleteButton = event.target.closest('[data-recommendation-delete]');
