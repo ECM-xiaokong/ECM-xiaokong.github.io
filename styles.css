@@ -359,7 +359,7 @@ body.is-admin .admin-recommendation-form {
     margin-left: 0;
 }
 
-body.is-admin .category-link-actions {
+body.link-edit-mode .category-link-actions {
     display: inline-flex !important;
 }
 
@@ -446,6 +446,10 @@ body.is-admin .category-admin-form {
     user-select: none;
 }
 
+body:not(.link-edit-mode) .recommendation-drag-handle {
+    display: none !important;
+}
+
 .recommendation-drag-handle:active {
     cursor: grabbing;
 }
@@ -454,11 +458,31 @@ body.is-admin .category-admin-form {
     opacity: 0.45;
 }
 
+.link-edit-mode .category-links,
+.link-edit-mode #recommendationLinks {
+    touch-action: none;
+}
+
+.link-edit-mode .category-links li,
+.link-edit-mode #recommendationLinks li {
+    cursor: grab;
+}
+
+.link-edit-mode .category-links li:active,
+.link-edit-mode #recommendationLinks li:active {
+    cursor: grabbing;
+}
+
+.link-edit-mode .category-links li > a,
+.link-edit-mode #recommendationLinks li > a {
+    pointer-events: none;
+}
+
 body:not(.is-admin) #recommendationLinks li {
     cursor: default;
 }
 
-body.is-admin .recommendation-actions {
+body.link-edit-mode .recommendation-actions {
     display: inline-flex !important;
 }
 
@@ -751,6 +775,23 @@ body.is-admin .message-admin-actions {
     display: flex;
     gap: 10px;
     z-index: 1000;
+}
+
+.edit-mode-btn {
+    min-height: 50px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.55);
+    color: var(--primary-dark);
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 5px 18px rgba(74, 158, 255, 0.12);
+}
+
+.edit-mode-btn[aria-pressed="true"] {
+    background: var(--primary);
+    color: white;
 }
 
 .auth-btn,

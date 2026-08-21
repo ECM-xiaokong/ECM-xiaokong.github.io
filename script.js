@@ -8,6 +8,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const LAST_TAB_STORAGE_KEY = 'meow_last_tab';
     const ACCESS_DURATION = 30 * 24 * 60 * 60 * 1000;
     let pendingTabName = null;
+    let linkEditMode = false;
+
+    function setLinkEditMode(enabled) {
+        linkEditMode = Boolean(enabled) && window.hasAdminAccess();
+        document.body.classList.toggle('link-edit-mode', linkEditMode);
+        const editModeButton = document.getElementById('editModeBtn');
+        if (editModeButton) {
+            editModeButton.textContent = linkEditMode ? '✅ 完成编辑' : '✏️ 编辑模式';
+            editModeButton.title = linkEditMode ? '退出编辑模式' : '开启编辑模式';
+            editModeButton.setAttribute('aria-pressed', String(linkEditMode));
+        }
+    }
 
     const confirmModal = document.getElementById('confirmModal');
     const confirmMessage = document.getElementById('confirmMessage');
@@ -59,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.toggle('is-admin', isAdmin);
         const accessButton = document.getElementById('accessButton');
         if (accessButton) accessButton.textContent = isAdmin ? '🔑 管理员' : valid ? '🔑 已授权' : '🔑 暗号';
+        if (!isAdmin) setLinkEditMode(false);
         if (valid) document.dispatchEvent(new Event('accessGranted'));
     }
 
@@ -68,6 +81,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.getAccessToken = getAccessToken;
     window.hasAdminAccess = () => hasValidAccess() && localStorage.getItem(ACCESS_ROLE_KEY) === 'admin';
+
+    document.getElementById('editModeBtn')?.addEventListener('click', () => {
+        if (window.hasAdminAccess()) setLinkEditMode(!linkEditMode);
+    });
+
+    document.addEventListener('click', (event) => {
+        if (linkEditMode && event.target.closest('.category-links a, #recommendationLinks a')) event.preventDefault();
+    }, true);
+
+    function addLongPressSorting(list, itemSelector, saveOrder) {
+        let pressTimer = null;
+        let draggedItem = null;
+        let moved = false;
+
+        list.addEventListener('pointerdown', (event) => {
+            if (!linkEditMode || event.target.closest('button, a')) return;
+            const item = event.target.closest(itemSelector);
+            if (!item) return;
+            moved = false;
+            pressTimer = window.setTimeout(() => {
+                draggedItem = item;
+                draggedItem.classList.add('is-dragging');
+                if (event.pointerType === 'touch') list.setPointerCapture(event.pointerId);
+            }, 350);
+        });
+
+        list.addEventListener('pointermove', (event) => {
+            if (!draggedItem) return;
+            moved = true;
+            event.preventDefault();
+            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(itemSelector);
+            if (!target || target === draggedItem || !list.contains(target)) return;
+            const rect = target.getBoundingClientRect();
+            target.parentNode.insertBefore(draggedItem, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
+        });
+
+        const finish = async (event) => {
+            window.clearTimeout(pressTimer);
+            if (!draggedItem) return;
+            draggedItem.classList.remove('is-dragging');
+            draggedItem = null;
+            if (moved) await saveOrder();
+            if (event.pointerId && list.hasPointerCapture?.(event.pointerId)) list.releasePointerCapture(event.pointerId);
+        };
+
+        list.addEventListener('pointerup', finish);
+        list.addEventListener('pointercancel', finish);
+    }
 
     // 标签页切换：同步内容面板和导航按钮的 active 状态
     function switchTab(tabName, event) {
@@ -676,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         async function saveRecommendationOrder() {
-            if (!window.hasAdminAccess()) return;
+            if (!window.hasAdminAccess() || !linkEditMode) return;
             const ids = [...list.querySelectorAll('[data-recommendation-id]')]
                 .map((item) => Number(item.dataset.recommendationId));
             const { error } = await supabaseClient.rpc('admin_reorder_recommendations', {
@@ -707,12 +768,13 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelButton.addEventListener('click', clearForm);
         list.addEventListener('dragstart', (event) => {
             const item = event.target.closest('[data-recommendation-id]');
-            if (!window.hasAdminAccess() || !item) return event.preventDefault();
+            if (!window.hasAdminAccess() || !linkEditMode || !item) return event.preventDefault();
             item.classList.add('is-dragging');
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData('text/plain', item.dataset.recommendationId);
         });
         list.addEventListener('dragover', (event) => {
+            if (!linkEditMode) return;
             event.preventDefault();
             const dragging = list.querySelector('.is-dragging');
             const target = event.target.closest('[data-recommendation-id]');
@@ -721,11 +783,13 @@ document.addEventListener('DOMContentLoaded', () => {
             target.parentNode.insertBefore(dragging, event.clientY < targetRect.top + targetRect.height / 2 ? target : target.nextSibling);
         });
         list.addEventListener('dragend', async () => {
+            if (!linkEditMode) return;
             const dragging = list.querySelector('.is-dragging');
             if (!dragging) return;
             dragging.classList.remove('is-dragging');
             await saveRecommendationOrder();
         });
+        addLongPressSorting(list, '[data-recommendation-id]', saveRecommendationOrder);
         document.addEventListener('click', async (event) => {
             const editButton = event.target.closest('[data-recommendation-edit]');
             const deleteButton = event.target.closest('[data-recommendation-delete]');
@@ -848,8 +912,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 const linkHtml = isWebUrl
                     ? `<a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer">${faviconHtml}${contactPrefix}${displayTitle}</a>`
                     : `<span>${faviconHtml}${contactPrefix}${displayTitle || escapeHtml(item.title)}</span>`;
-                return `<li>${linkHtml}<span class="admin-only category-link-actions"><button class="admin-only cat-edit-btn" type="button" data-cat-edit="${item.id}" data-cat-category="${categoryId}" data-cat-title="${escapeHtml(item.title)}" data-cat-url="${contactValue}">编辑</button><button class="admin-only cat-delete-btn" type="button" data-cat-delete="${item.id}" data-cat-category="${categoryId}">删除</button></span></li>`;
+                return `<li draggable="true" data-cat-link-id="${item.id}">${linkHtml}<span class="recommendation-drag-handle admin-only" title="长按并拖动排序" aria-label="长按并拖动排序">⠿</span><span class="admin-only category-link-actions"><button class="admin-only cat-edit-btn" type="button" data-cat-edit="${item.id}" data-cat-category="${categoryId}" data-cat-title="${escapeHtml(item.title)}" data-cat-url="${contactValue}">编辑</button><button class="admin-only cat-delete-btn" type="button" data-cat-delete="${item.id}" data-cat-category="${categoryId}">删除</button></span></li>`;
             }).join('');
+        }
+
+        async function saveCategoryOrder(categoryId) {
+            if (!window.hasAdminAccess() || !linkEditMode) return;
+            const list = getCategoryList(categoryId);
+            const ids = [...list.querySelectorAll('[data-cat-link-id]')]
+                .map((item) => Number(item.dataset.catLinkId));
+            const { error } = await supabaseClient.rpc('admin_reorder_category_links', {
+                p_access_token: window.getAccessToken(),
+                p_category_id: categoryId,
+                p_ids: ids
+            });
+            if (error) {
+                window.alert(error.message || '链接排序保存失败喵~');
+                await loadCategoryLinks(categoryId);
+            }
+        }
+
+        function addCategorySorting(categoryId) {
+            const list = getCategoryList(categoryId);
+            if (!list) return;
+            list.addEventListener('dragstart', (event) => {
+                const item = event.target.closest('[data-cat-link-id]');
+                if (!window.hasAdminAccess() || !linkEditMode || !item) return event.preventDefault();
+                item.classList.add('is-dragging');
+                event.dataTransfer.effectAllowed = 'move';
+            });
+            list.addEventListener('dragover', (event) => {
+                if (!linkEditMode) return;
+                event.preventDefault();
+                const dragging = list.querySelector('.is-dragging');
+                const target = event.target.closest('[data-cat-link-id]');
+                if (!dragging || !target || dragging === target) return;
+                const rect = target.getBoundingClientRect();
+                target.parentNode.insertBefore(dragging, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
+            });
+            list.addEventListener('dragend', async () => {
+                const dragging = list.querySelector('.is-dragging');
+                if (!dragging) return;
+                dragging.classList.remove('is-dragging');
+                await saveCategoryOrder(categoryId);
+            });
+            addLongPressSorting(list, '[data-cat-link-id]', () => saveCategoryOrder(categoryId));
         }
 
         async function loadCategoryLinks(categoryId) {
@@ -882,6 +989,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         ensureCategoryShells();
+        CATEGORIES.forEach(addCategorySorting);
 
         // 监听编辑按钮点击
         document.addEventListener('click', (event) => {
