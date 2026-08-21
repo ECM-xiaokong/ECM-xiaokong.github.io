@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>喵の小窝 ~ White Blue</title>
+    <link rel="icon" type="image/png" href="Resources/TX.png">
+    <link rel="apple-touch-icon" href="Resources/TX.png">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- 鼠标粒子 Canvas：承载跟随鼠标移动的粒子动画 -->
+    <canvas id="cursor-fx-canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;"></canvas>
+
+    <!-- 效果设置面板：调整背景亮度、粒子和点击文字效果 -->
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-header">
+            <span>⚙️ 效果设置</span>
+            <button class="settings-close" onclick="toggleSettings()">✕</button>
+        </div>
+        <div class="settings-content">
+            <div class="setting-item">
+                <label>背景亮度</label>
+                <div class="slider-container">
+                    <input type="range" min="50" max="150" value="100" id="bgBrightness" class="slider" oninput="updateEffects()">
+                    <span id="brightnessValue">100</span>%
+                </div>
+            </div>
+            <div class="setting-item compact">
+                <div class="switch-row">
+                    <span class="switch-label">粒子特效</span>
+                    <label class="switch">
+                        <input type="checkbox" id="particleToggle" checked>
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="setting-item compact">
+                <div class="switch-row">
+                    <span class="switch-label">点击文字特效</span>
+                    <label class="switch">
+                        <input type="checkbox" id="clickTextToggle" checked>
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>每次移动生成粒子数</label>
+                <div class="slider-container">
+                    <input type="range" min="1" max="8" step="1" value="2" id="trailCount" class="slider" oninput="updateEffects()">
+                    <span id="trailCountValue">2</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>粒子最小尺寸</label>
+                <div class="slider-container">
+                    <input type="range" min="2" max="20" step="0.5" value="2.5" id="trailMinSize" class="slider" oninput="updateEffects()">
+                    <span id="trailMinSizeValue">2.5</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>粒子最大尺寸</label>
+                <div class="slider-container">
+                    <input type="range" min="6" max="25" step="0.5" value="8" id="trailMaxSize" class="slider" oninput="updateEffects()">
+                    <span id="trailMaxSizeValue">8</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>速度倍率</label>
+                <div class="slider-container">
+                    <input type="range" min="0.1" max="2" step="0.1" value="0.6" id="trailSpeed" class="slider" oninput="updateEffects()">
+                    <span id="trailSpeedValue">0.6</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>生命周期</label>
+                <div class="slider-container">
+                    <input type="range" min="20" max="160" step="5" value="50" id="trailLife" class="slider" oninput="updateEffects()">
+                    <span id="trailLifeValue">50</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>重力影响</label>
+                <div class="slider-container">
+                    <input type="range" min="-0.1" max="0.05" step="0.01" value="0.05" id="trailGravity" class="slider" oninput="updateEffects()">
+                    <span id="trailGravityValue">0.05</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>扩散角度</label>
+                <div class="slider-container">
+                    <input type="range" min="10" max="360" step="10" value="10" id="trailSpread" class="slider" oninput="updateEffects()">
+                    <span id="trailSpreadValue">10°</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 顶部操作区：登录注册和效果设置 -->
+    <div class="top-actions">
+        <button class="auth-btn" id="accessButton" type="button" title="输入访问暗号">🔑 暗号</button>
+        <button class="edit-mode-btn admin-only" id="editModeBtn" type="button" title="开启编辑模式" aria-pressed="false">✏️ 编辑模式</button>
+        <button class="settings-btn" id="settingsBtn" onclick="toggleSettings()" title="效果设置">⚙️</button>
+    </div>
+
+    <!-- 访问暗号弹窗：暗号交给 Supabase 校验，授权状态本地保留 30 天 -->
+    <div class="auth-modal" id="accessModal" aria-hidden="true">
+        <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="accessTitle">
+            <button class="auth-close" id="accessClose" type="button" aria-label="关闭">✕</button>
+            <h2 id="accessTitle">输入访问暗号</h2>
+            <p class="auth-status" id="accessStatus">请联系管理员获取暗号喵~</p>
+            <form id="accessForm" class="auth-form">
+                <input type="password" id="accessPassword" placeholder="访问暗号" autocomplete="off" required>
+                <button class="btn" id="accessSubmit" type="submit">验证暗号</button>
+            </form>
+            <button class="auth-logout" id="accessLogout" type="button">退出暗号</button>
+            <form id="changeCodeForm" class="auth-form admin-only">
+                <h3>修改暗号</h3>
+                <p>仅管理员可以修改普通暗号</p>
+                <input type="password" id="newNormalCode" placeholder="新的普通暗号（至少 6 位）" minlength="6" autocomplete="new-password" required>
+                <input type="password" id="confirmNormalCode" placeholder="再次输入新的普通暗号" minlength="6" autocomplete="new-password" required>
+                <button class="btn" id="changeCodeSubmit" type="submit">保存普通暗号</button>
+                <div class="auth-status" id="changeCodeStatus"></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="confirm-modal" id="confirmModal" aria-hidden="true">
+        <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+            <h2 id="confirmTitle">确认删除</h2>
+            <p id="confirmMessage">确定要删除这条链接吗？</p>
+            <div class="confirm-actions">
+                <button class="admin-cancel-button" id="confirmCancel" type="button">取消</button>
+                <button class="btn confirm-delete-button" id="confirmDelete" type="button">删除</button>
+            </div>
+        </div>
+    </div>
+
+        <!-- Hero 区域：展示头像、站点标题和个人简介 -->
+        <section class="hero">
+            <img src="Resources/TouXiang1.jpg"
+                 alt="头像"
+                 class="avatar"
+                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 120 120%22%3E%3Ccircle cx=%2260%22 cy=%2260%22 r=%2260%22 fill=%22%234a9eff%22/%3E%3Ctext x=%2260%22 y=%2265%22 text-anchor=%22middle%22 font-size=%2240%22 fill=%22white%22%3E🐱%3C/text%3E%3C/svg%3E'">
+            <h1>✨ 喵の小窝 ✨</h1>
+            <p> 晓空的个人小网站~ (ฅ´ωฅ)</p>
+        </section>
+
+        <!-- 标签页导航：在导航页、留言板、讨论区和其他内容间切换 -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="home" onclick="switchTab('home', event)">🏠 导航页</button>
+            <button class="tab-btn" data-tab="message" onclick="switchTab('message', event)">💬 留言板</button>
+            <button class="tab-btn" data-tab="discuss" onclick="switchTab('discuss', event)">🗣️ 讨论区</button>
+            <button class="tab-btn" data-access-required data-tab="other" onclick="switchTab('other', event)">✨ 其他</button>
+        </div>
+
+        <!-- 标签页内容：每个区域对应一个可切换的页面面板 -->
+
+        <!-- 导航页：展示外部链接和站点欢迎信息 -->
+        <div id="home" class="tab-content active">
+            <section class="glass-card">
+                <h2 class="section-title">🌟 欢迎来到我的小窝</h2>
+                <!-- 普通分类和链接均由 Supabase 数据库动态渲染，管理员登录后可编辑 -->
+                <nav class="category-list" id="categoryList" aria-label="网站分类导航"></nav>
+                <nav class="category-list" aria-label="站长推荐导航">
+                    <details class="category-item" data-access-required>
+                        <summary><span>💗站长推荐💗</span></summary>
+                        <ul class="category-links" id="recommendationLinks">
+                            <li class="empty-recommendations">正在加载推荐链接喵~</li>
+                        </ul>
+                        <form class="admin-recommendation-form admin-only" id="recommendationForm">
+                            <input type="hidden" id="recommendationId">
+                            <input type="text" id="recommendationTitle" placeholder="链接名称" required>
+                            <input type="url" id="recommendationUrl" placeholder="https://example.com" required>
+                            <div class="admin-form-actions">
+                                <button class="btn" type="submit">保存链接</button>
+                                <button class="delete-link-button" id="recommendationDelete" type="button" disabled>删除</button>
+                                <button class="admin-cancel-button" id="recommendationCancel" type="button">取消</button>
+                            </div>
+                        </form>
+                    </details>
+                </nav>
+                <div style="padding: 20px; background: rgba(74, 158, 255, 0.05); border-radius: 14px; margin-top: 20px; line-height: 1.8;">
+                    <p style="color: var(--text-primary); margin-bottom: 12px;">👋 Hi！欢迎来到我的个人网站！</p>
+                    <p style="color: var(--text-secondary);">这是一个关于我的小窝，分享我的项目、想法和日常。快来<a href="#message" onclick="switchTab('message', event); return false;" style="color: var(--primary); font-weight: 600;">留言</a>或者<a href="#discuss" onclick="switchTab('discuss', event); return false;" style="color: var(--primary); font-weight: 600;">讨论</a>吧~ 🐱</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- 留言板：提交并展示保存在本地的留言 -->
+        <div id="message" class="tab-content">
+            <section class="glass-card">
+                <h2 class="section-title">💬 留言板</h2>
+                <form class="message-form" id="messageForm">
+                    <input type="text" id="msgName" placeholder="你的名字喵~" required>
+                    <input type="text" id="msgContact" placeholder="联系方式喵~（选填）">
+                    <textarea id="msgContent" maxlength="600" placeholder="想说点什么呀喵~（最多 600 个字符）" required></textarea>
+                    <label class="file-input-label" for="msgImage">上传图片（选填）</label>
+                    <input type="file" id="msgImage" accept="image/png,image/jpeg,image/gif,image/webp">
+                    <input type="url" id="msgLink" placeholder="留言超链接（选填，例如 https://example.com）">
+                    <div class="upload-status" id="uploadStatus"></div>
+                    <button type="submit" class="btn">💌 发送留言</button>
+                </form>
+                <div class="message-list" id="messageList">
+                    <!-- 留言会动态渲染到这里喵 -->
+                </div>
+            </section>
+        </div>
+
+        <!-- 讨论区：嵌入 Giscus GitHub Discussions 评论组件 -->
+        <div id="discuss" class="tab-content">
+            <section class="glass-card">
+                <h2 class="section-title">🗣️ 讨论区</h2>
+                <div id="giscus-container">
+                    <script src="https://giscus.app/client.js"
+                        data-repo="ECM-xiaokong/ECM-xiaokong.github.io"
+                        data-repo-id="R_kgDOT8gFAg"
+                        data-category="General"
+                        data-category-id="DIC_kwDOT8gFAs4DDp2k"
+                        data-mapping="pathname"
+                        data-strict="0"
+                        data-reactions-enabled="1"
+                        data-emit-metadata="0"
+                        data-input-position="bottom"
+                        data-theme="preferred_color_scheme"
+                        data-lang="zh-CN"
+                        crossorigin="anonymous"
+                        async>
+                    </script>
+                </div>
+            </section>
+        </div>
+
+        <!-- 其他：预留扩展内容的页面区域 -->
+        <div id="other" class="tab-content" data-access-required>
+            <section class="glass-card">
+                <h2 class="section-title">✨ 其他内容</h2>
+                <div style="padding: 20px; background: rgba(74, 158, 255, 0.05); border-radius: 14px; text-align: center;">
+                    <p style="color: var(--text-secondary); margin: 20px 0;">
+                        这里还有更多有趣的内容等待你去发现~ 🎨
+                    </p>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        敬请期待... 或者来<a href="#message" onclick="switchTab('message', event); return false;" style="color: var(--primary); font-weight: 600;">留言</a>告诉我你想看什么！
+                    </p>
+                </div>
+            </section>
+        </div>
+
+        <!-- 页脚：展示版权信息和快捷链接 -->
+        <footer class="footer">
+            <p>🐱 Made with 💙 by 一只猫猫 ~ © 2026</p>
+            <p style="margin-top:4px;">
+                <a href="#" onclick="switchTab('message', event); return false;">留个言喵~</a>
+                <span style="margin:0 8px">·</span>
+                <a href="https://github.com" target="_blank">GitHub</a>
+            </p>
+        </footer>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="script.js"></script>
+
+</body>
+</html>
